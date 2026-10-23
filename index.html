@@ -79,6 +79,20 @@ svg .bar-day{fill:var(--accent)}
 svg .bar-batt{fill:var(--batt)}
 .sw.day{background:var(--accent)}
 .sw.batt{background:var(--batt)}
+.sw.mark{height:3px; vertical-align:3px; background:var(--ink)}
+svg .solar-mark{stroke:var(--ink); stroke-width:2.5}
+.appgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px}
+.appcard{border:1px solid var(--line); border-radius:6px; padding:14px; display:flex; flex-direction:column; gap:10px; min-width:0}
+.appcard h3{margin:0; font-family:var(--font-display); font-size:15px; font-weight:700}
+.appfields{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+.appfields .wide{grid-column:1 / -1}
+.appout{margin:0; font-size:13px; color:var(--muted)}
+.appout strong{color:var(--ink); font-family:var(--font-mono); font-weight:500}
+th:first-child,td:first-child{position:sticky; left:0; background:var(--surface); z-index:1}
+tbody tr:hover td:first-child{background:var(--bg)}
+tbody tr.on td:first-child{background:var(--accent-soft)}
+.grp th{text-align:center; color:var(--ink); font-weight:700; padding-bottom:4px}
+.grp th:first-child{text-align:left}
 .sw.night{background:var(--ink); opacity:0.2}
 svg .t-cool{fill:var(--sky); font-weight:500}
 svg .t-heat{fill:var(--warn); font-weight:500}
@@ -227,17 +241,39 @@ tbody tr.on td:first-child{font-weight:700}
     <dl class="stats" id="acSplit" style="margin:0 0 14px"></dl>
     <div class="scroll"><div class="chart" id="acChart"></div></div>
     <div class="legend">
-      <span><i class="sw day"></i>Daytime, with solar</span>
+      <span><i class="sw day"></i>Dawn to dusk, with solar</span>
       <span><i class="sw batt"></i>Dusk to dawn, on battery</span>
     </div>
-    <p class="note" style="margin:10px 0 0">Daytime means hours with sunlight on the panels. Dusk to dawn means hours with almost none, so that energy has to come from your battery. Each calendar day includes the hours after midnight and before sunrise, which draw on the battery charged the day before.</p>
+    <p class="note" style="margin:10px 0 0">Dawn to dusk means hours with sunlight on the panels. Dusk to dawn means hours with almost none, so that energy has to come from your battery. Each calendar day includes the hours after midnight and before sunrise, which draw on the battery charged the day before.</p>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><h2>Appliances</h2><p>Typical starting values. Replace them with your own.</p></div>
+    <dl class="stats" id="appSummary" style="margin:0 0 14px"></dl>
+    <div class="appgrid" id="appCards"></div>
+    <p class="note" style="margin:12px 0 0">Energy per day is uses per day × kWh per use. Use a fraction for things you do less than daily, for example 0.5 for every second day. The When setting decides whether the energy counts as dawn to dusk (sun up, solar available) or dusk to dawn (battery). The same amount is applied to every forecast day.</p>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><h2>Energy summary</h2><p>Air conditioner and appliances combined</p></div>
+    <dl class="stats" id="sumStats" style="margin:0 0 14px"></dl>
+    <div class="scroll"><div class="chart" id="sumChart"></div></div>
+    <div class="legend">
+      <span><i class="sw day"></i>Used dawn to dusk</span>
+      <span><i class="sw batt"></i>Used dusk to dawn, from battery</span>
+      <span><i class="sw mark"></i>Solar generated</span>
+    </div>
+    <p class="note" style="margin:10px 0 0">Dawn to dusk use is compared with the solar generated that day. Spare solar can charge the battery or be exported. Any shortfall comes from the battery or grid. Dusk to dawn use is what the battery has to supply overnight. Fridge, lighting, electronics and other everyday loads are not included.</p>
   </section>
 
   <section class="panel">
     <div class="section-head"><h2>Day by day</h2></div>
     <div class="scroll">
       <table>
-        <thead><tr><th>Day</th><th>Solar (kWh)</th><th>Peak (kW)</th><th>Low–high (°C)</th><th>Air con (h)</th><th>Air con (kWh)</th><th>Daytime (kWh)</th><th>Dusk–dawn (kWh)</th></tr></thead>
+        <thead>
+          <tr class="grp"><th></th><th colspan="2">Solar</th><th>Weather</th><th colspan="4">Air conditioner</th><th>Appliances</th><th colspan="3">All energy use</th></tr>
+          <tr><th>Day</th><th>Solar kWh</th><th>Peak kW</th><th>Low–high °C</th><th>Hours</th><th>kWh</th><th>Dawn–dusk kWh</th><th>Dusk–dawn kWh</th><th>kWh</th><th>Dawn–dusk kWh</th><th>Dusk–dawn kWh</th><th>Total kWh</th></tr>
+        </thead>
         <tbody id="rows"></tbody>
       </table>
     </div>
@@ -247,6 +283,7 @@ tbody tr.on td:first-child{font-weight:700}
 <section class="note">
   <p><strong>How it works.</strong> The page asks Open-Meteo for hourly sunlight landing on a surface with your tilt and direction, using the weather models it blends for this location. Each hour: panel kW × sunlight ÷ 1000 × system efficiency × a heat factor (panels lose about 0.35% per °C of cell temperature above 25 °C), then capped at your inverter limit.</p>
   <p><strong>Air conditioner.</strong> Each hour uses your night limits or your day limits, depending on the clock. An hour above that period's cooling limit counts as cooling, and an hour below its heating limit counts as heating. Each hour of use is charged at the power draw you set. The forecast is outdoor air temperature, so set each limit as the outdoor temperature at which you would switch the unit on.</p>
+  <p><strong>Appliances.</strong> The starting values for the washing machine, dryer, induction cooktop, oven, dishwasher and hot water system are typical household figures, not your measurements. Check the energy label or manual, or your meter, and overwrite them. Hot water in particular varies a lot between an electric element and a heat pump.</p>
   <p>Treat results as a planning estimate. Shading, dirt, panel age and inverter behaviour are not known to the forecast. System efficiency of around 80% is a typical starting point; adjust it once you compare a few days against your real meter or inverter app.</p>
   <p>Forecast data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. Times are Albury local time.</p>
 </section>
@@ -258,7 +295,7 @@ tbody tr.on td:first-child{font-weight:700}
   "use strict";
   var LAT = -36.0737, LON = 146.9135, TZ = "Australia/Sydney";
   var els = {};
-  ["acChart","acSplit","nCoolAt","nHeatAt","nStart","nEnd","coolAt","heatAt","acKw","acMsg","acStats","tempChart","tempSub","manual","dataLink","paste","usePaste","pasteMsg","size","inv","az","tilt","eff","days","daysOut","peak","calib","calibOut","refresh","fetched","status","main","total","period","stats","dailyChart","hourChart","hourTitle","hourSub","rows"]
+  ["appCards","appSummary","sumChart","sumStats","acChart","acSplit","nCoolAt","nHeatAt","nStart","nEnd","coolAt","heatAt","acKw","acMsg","acStats","tempChart","tempSub","manual","dataLink","paste","usePaste","pasteMsg","size","inv","az","tilt","eff","days","daysOut","peak","calib","calibOut","refresh","fetched","status","main","total","period","stats","dailyChart","hourChart","hourTitle","hourSub","rows"]
     .forEach(function(id){ els[id] = document.getElementById(id); });
 
   var raw = null;          // { key, time[], gti[], temp[], cloud[], fetchedAt }
@@ -278,7 +315,31 @@ tbody tr.on td:first-child{font-weight:700}
     }
     sel.value = k === 0 ? "22" : "7";
   });
-  var KEYS = ["size","inv","az","tilt","eff","days","peak","coolAt","heatAt","nCoolAt","nHeatAt","nStart","nEnd","acKw"];
+  // Typical starting values. uses = per day, kwh = per use, hrs = running hours per use, when: 1 = dawn to dusk, 0 = dusk to dawn
+  var APPS = [
+    { id: "wm", name: "Washing machine",   uses: 0.6, kwh: 0.9,  hrs: 1.5,  when: "1" },
+    { id: "dr", name: "Dryer",             uses: 0.4, kwh: 3.5,  hrs: 1.5,  when: "1" },
+    { id: "ck", name: "Induction cooktop", uses: 1,   kwh: 1.1,  hrs: 0.75, when: "0" },
+    { id: "ov", name: "Oven",              uses: 0.5, kwh: 1.5,  hrs: 1,    when: "0" },
+    { id: "dw", name: "Dishwasher",        uses: 1,   kwh: 1.0,  hrs: 2,    when: "0" },
+    { id: "hw", name: "Hot water system",  uses: 1,   kwh: 5,    hrs: 1.5,  when: "1" }
+  ];
+  els.appCards.innerHTML = APPS.map(function(a){
+    return '<div class="appcard"><h3>' + a.name + '</h3><div class="appfields">' +
+      '<div class="field"><label for="' + a.id + 'Uses">Uses per day</label><input id="' + a.id + 'Uses" type="number" min="0" max="20" step="0.1" value="' + a.uses + '" inputmode="decimal"></div>' +
+      '<div class="field"><label for="' + a.id + 'Kwh">kWh per use</label><input id="' + a.id + 'Kwh" type="number" min="0" max="50" step="0.1" value="' + a.kwh + '" inputmode="decimal"></div>' +
+      '<div class="field"><label for="' + a.id + 'Hrs">Hours per use</label><input id="' + a.id + 'Hrs" type="number" min="0" max="24" step="0.25" value="' + a.hrs + '" inputmode="decimal"></div>' +
+      '<div class="field"><label for="' + a.id + 'When">When</label><select id="' + a.id + 'When">' +
+        '<option value="1">Dawn to dusk</option><option value="0">Dusk to dawn</option><option value="0.5">Half and half</option></select></div>' +
+      '</div><p class="appout" id="' + a.id + 'Out"></p></div>';
+  }).join("");
+  var appKeys = [];
+  APPS.forEach(function(a){
+    ["Uses","Kwh","Hrs","When","Out"].forEach(function(k){ els[a.id + k] = document.getElementById(a.id + k); });
+    els[a.id + "When"].value = a.when;
+    ["Uses","Kwh","Hrs","When"].forEach(function(k){ appKeys.push(a.id + k); });
+  });
+  var KEYS = ["size","inv","az","tilt","eff","days","peak","coolAt","heatAt","nCoolAt","nHeatAt","nStart","nEnd","acKw"].concat(appKeys);
   try {
     var saved = JSON.parse(localStorage.getItem("albury-solar") || "{}");
     KEYS.forEach(function(k){ if (saved[k] != null && els[k]) els[k].value = saved[k]; });
@@ -395,6 +456,21 @@ tbody tr.on td:first-child{font-weight:700}
     return Math.min(dc, s.inv);
   }
 
+  function appTotals(){
+    var rows = APPS.map(function(a){
+      var uses = num(els[a.id + "Uses"], 0, 20, a.uses);
+      var kwh = num(els[a.id + "Kwh"], 0, 50, a.kwh);
+      var hrs = num(els[a.id + "Hrs"], 0, 24, a.hrs);
+      var share = parseFloat(els[a.id + "When"].value);
+      if (!isFinite(share)) share = parseFloat(a.when);
+      var e = uses * kwh;
+      return { id: a.id, name: a.name, share: share, e: e, h: uses * hrs, day: e * share, night: e * (1 - share) };
+    });
+    var t = { rows: rows, e: 0, h: 0, day: 0, night: 0 };
+    rows.forEach(function(r){ t.e += r.e; t.h += r.h; t.day += r.day; t.night += r.night; });
+    return t;
+  }
+
   function isNight(h, s){
     if (s.nStart === s.nEnd) return false;
     return s.nStart > s.nEnd ? (h >= s.nStart || h < s.nEnd) : (h >= s.nStart && h < s.nEnd);
@@ -439,9 +515,11 @@ tbody tr.on td:first-child{font-weight:700}
       }
       o.hours.push({ h: h, kw: kw, t: tOk ? tt : null, mode: mode, night: lim.night, coolLim: lim.cool, heatLim: lim.heat });
     }
+    var ap = appTotals();
     var all = order.map(function(d){
       var o = map[d];
       o.cloud = o.cloudN ? o.cloudSum / o.cloudN : null;
+      o.appKwh = ap.e; o.appSun = ap.day; o.appBatt = ap.night;
       return o;
     });
     var today = todayKey();
@@ -534,6 +612,8 @@ tbody tr.on td:first-child{font-weight:700}
     drawHourly(s);
     drawTemp(s);
     drawAcChart(s);
+    updateApps();
+    drawSummary(s);
     drawRows();
   }
 
@@ -635,7 +715,7 @@ tbody tr.on td:first-child{font-weight:700}
     daysData.forEach(function(d){ sun += d.acSun; batt += d.acBatt; cov += d.covered; });
     els.acSplit.innerHTML =
       stat("Air con, whole period", f1(sun + batt) + " kWh") +
-      stat("Daytime, with solar", f1(sun) + " kWh") +
+      stat("Dawn to dusk, with solar", f1(sun) + " kWh") +
       stat("Dusk to dawn, on battery", f1(batt) + " kWh") +
       stat("Matched by solar output", f1(cov) + " kWh");
 
@@ -655,7 +735,7 @@ tbody tr.on td:first-child{font-weight:700}
     daysData.forEach(function(d, i){
       var cx = L + slot * i + slot / 2;
       var base = T + ph, yMid = y(d.acSun), yTop = y(d.acKwh);
-      out += '<g><title>' + dayLabel(d.date, true) + ': daytime ' + f1(d.acSun) + ' kWh, dusk to dawn ' + f1(d.acBatt) + ' kWh</title>';
+      out += '<g><title>' + dayLabel(d.date, true) + ': dawn to dusk ' + f1(d.acSun) + ' kWh, dusk to dawn ' + f1(d.acBatt) + ' kWh</title>';
       out += '<rect class="bar-day" x="' + (cx - bw / 2) + '" y="' + yMid + '" width="' + bw + '" height="' + Math.max(0, base - yMid) + '"/>';
       out += '<rect class="bar-batt" x="' + (cx - bw / 2) + '" y="' + yTop + '" width="' + bw + '" height="' + Math.max(0, yMid - yTop) + '"/></g>';
       out += '<text class="val" x="' + cx + '" y="' + (yTop - 7) + '" text-anchor="middle">' + f1(d.acKwh) + '</text>';
@@ -666,6 +746,64 @@ tbody tr.on td:first-child{font-weight:700}
     out += "</svg>";
     els.acChart.innerHTML = out;
   }
+  function updateApps(){
+    var t = appTotals();
+    t.rows.forEach(function(r){
+      var when = r.share === 1 ? "dawn to dusk" : (r.share === 0 ? "dusk to dawn" : "half dawn to dusk, half dusk to dawn");
+      els[r.id + "Out"].innerHTML = "<strong>" + f1(r.e) + " kWh</strong> per day · " + f1(r.h) + " h running · " + when;
+    });
+    els.appSummary.innerHTML =
+      stat("Appliances per day", f1(t.e) + " kWh") +
+      stat("Dawn to dusk", f1(t.day) + " kWh") +
+      stat("Dusk to dawn", f1(t.night) + " kWh") +
+      stat("Running time", f1(t.h) + " h");
+  }
+
+  function drawSummary(s){
+    var n = daysData.length, dayU = 0, nightU = 0, solar = 0, spare = 0, short = 0;
+    daysData.forEach(function(d){
+      var du = d.acSun + d.appSun, nu = d.acBatt + d.appBatt;
+      d.sumDay = du; d.sumNight = nu;
+      dayU += du; nightU += nu; solar += d.kwh;
+      if (d.kwh >= du) spare += d.kwh - du; else short += du - d.kwh;
+    });
+    els.sumStats.innerHTML =
+      stat("Total use", f1(dayU + nightU) + " kWh") +
+      stat("Dawn to dusk use", f1(dayU) + " kWh") +
+      stat("Dusk to dawn use (battery)", f1(nightU) + " kWh") +
+      stat("Solar generated", f1(solar) + " kWh") +
+      stat("Spare solar", f1(spare) + " kWh") +
+      stat("Daytime shortfall", f1(short) + " kWh");
+
+    var W = 760, H = 300, L = 44, R = 12, T = 26, B = 40;
+    var maxV = Math.max.apply(null, daysData.map(function(d){ return Math.max(d.sumDay + d.sumNight, d.kwh); }).concat([1]));
+    var mm = maxV * 1.12;
+    var sc = niceMax(mm, mm <= 6 ? 1 : (mm <= 12 ? 2 : 0));
+    var pw = W - L - R, ph = H - T - B;
+    var slot = pw / n, bw = Math.min(46, slot * 0.64);
+    function y(v){ return T + ph - (v / sc.max) * ph; }
+    var out = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Total energy use for each day split between dawn to dusk and dusk to dawn, with solar generated">';
+    for (var v = 0; v <= sc.max + 0.001; v += sc.step){
+      out += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>';
+      out += '<text x="' + (L - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+    }
+    out += '<text x="' + L + '" y="12">kWh</text>';
+    daysData.forEach(function(d, i){
+      var cx = L + slot * i + slot / 2;
+      var base = T + ph, yMid = y(d.sumDay), yTop = y(d.sumDay + d.sumNight), ySol = y(d.kwh);
+      out += '<g><title>' + dayLabel(d.date, true) + ': used dawn to dusk ' + f1(d.sumDay) + ' kWh, dusk to dawn ' + f1(d.sumNight) + ' kWh, solar generated ' + f1(d.kwh) + ' kWh</title>';
+      out += '<rect class="bar-day" x="' + (cx - bw / 2) + '" y="' + yMid + '" width="' + bw + '" height="' + Math.max(0, base - yMid) + '"/>';
+      out += '<rect class="bar-batt" x="' + (cx - bw / 2) + '" y="' + yTop + '" width="' + bw + '" height="' + Math.max(0, yMid - yTop) + '"/>';
+      out += '<line class="solar-mark" x1="' + (cx - bw / 2 - 6) + '" x2="' + (cx + bw / 2 + 6) + '" y1="' + ySol + '" y2="' + ySol + '"/></g>';
+      out += '<text class="val" x="' + cx + '" y="' + (Math.min(yTop, ySol) - 8) + '" text-anchor="middle">' + f1(d.sumDay + d.sumNight) + '</text>';
+      var dt = new Date(d.date + "T12:00:00");
+      out += '<text x="' + cx + '" y="' + (H - 20) + '" text-anchor="middle">' + dt.toLocaleDateString("en-AU", { weekday: "short" }) + '</text>';
+      out += '<text x="' + cx + '" y="' + (H - 6) + '" text-anchor="middle">' + dt.getDate() + '</text>';
+    });
+    out += "</svg>";
+    els.sumChart.innerHTML = out;
+  }
+
   function stat(k, v){ return "<div><dt>" + escapeHtml(k) + "</dt><dd>" + escapeHtml(v) + "</dd></div>"; }
 
   function niceMax(m, steps){
@@ -747,7 +885,11 @@ tbody tr.on td:first-child{font-weight:700}
         '<td class="num">' + d.acH + "</td>" +
         '<td class="num">' + f1(d.acKwh) + "</td>" +
         '<td class="num">' + f1(d.acSun) + "</td>" +
-        '<td class="num">' + f1(d.acBatt) + "</td></tr>";
+        '<td class="num">' + f1(d.acBatt) + "</td>" +
+        '<td class="num">' + f1(d.appKwh) + "</td>" +
+        '<td class="num">' + f1(d.acSun + d.appSun) + "</td>" +
+        '<td class="num">' + f1(d.acBatt + d.appBatt) + "</td>" +
+        '<td class="num"><strong>' + f1(d.acKwh + d.appKwh) + "</strong></td></tr>";
     }).join("");
   }
 
@@ -785,11 +927,18 @@ tbody tr.on td:first-child{font-weight:700}
       timer = setTimeout(function(){ load(false); }, 450);
     });
   });
+  APPS.forEach(function(a){
+    ["Uses","Kwh","Hrs"].forEach(function(k){
+      els[a.id + k].addEventListener("input", function(){ save(); if (raw) render(); else updateApps(); });
+    });
+    els[a.id + "When"].addEventListener("change", function(){ save(); if (raw) render(); else updateApps(); });
+  });
   els.peak.addEventListener("input", function(){ save(); if (raw) calibNote(settings()); });
   els.calib.addEventListener("click", calibrate);
   els.refresh.addEventListener("click", function(){ load(true); });
 
   els.daysOut.textContent = settings().days;
+  updateApps();
   load(true);
 })();
 </script>
