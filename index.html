@@ -1,0 +1,797 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Albury Solar Forecast</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: one column. Header with period total, controls strip, daily bar chart,
+   hourly profile for the chosen day, then a daily table. Amber marks energy; blue-grey marks sky. */
+:root{
+  --bg:#EDF0F1; --surface:#F8FAFA; --ink:#13232B; --muted:#586A72; --line:#CDD6DA;
+  --accent:#D98E04; --accent-soft:#F1D9A4; --sky:#4A7A93; --warn:#B3402A; --batt:#5B55A0;
+  --font-display:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --font-body:"Archivo","Helvetica Neue",Arial,sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E171B; --surface:#152127; --ink:#E6EEF0; --muted:#8FA2AA; --line:#27373E;
+    --accent:#F2B233; --accent-soft:#5A4410; --sky:#7FB0C8; --warn:#E37A62; --batt:#A9A3E6; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E171B; --surface:#152127; --ink:#E6EEF0; --muted:#8FA2AA; --line:#27373E;
+  --accent:#F2B233; --accent-soft:#5A4410; --sky:#7FB0C8; --warn:#E37A62; --batt:#A9A3E6; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--font-body); font-size:15px; line-height:1.5;
+  padding-block:28px 48px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));
+  padding-right:max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap{max-width:920px; margin:0 auto; display:flex; flex-direction:column; gap:28px}
+h1,h2{font-family:var(--font-display); text-wrap:balance; margin:0}
+h1{font-size:clamp(26px,5vw,36px); font-weight:800; letter-spacing:-0.02em; line-height:1.1}
+h2{font-size:17px; font-weight:700; letter-spacing:-0.005em}
+.eyebrow{font-family:var(--font-mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--muted)}
+.num{font-family:var(--font-mono); font-variant-numeric:tabular-nums}
+
+header{display:flex; flex-direction:column; gap:10px}
+.headline{display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 18px}
+.total{font-family:var(--font-display); font-weight:800; font-size:clamp(44px,10vw,72px); letter-spacing:-0.03em; line-height:1}
+.total small{font-size:0.32em; font-weight:700; letter-spacing:0; color:var(--muted); margin-left:6px}
+.stats{display:flex; flex-wrap:wrap; gap:8px 28px; margin:6px 0 0; padding:0}
+.stats div{display:flex; flex-direction:column; min-width:0}
+.stats dt{font-size:12px; color:var(--muted)}
+.stats dd{margin:0; font-family:var(--font-mono); font-variant-numeric:tabular-nums; font-size:16px; font-weight:500}
+
+.panel{background:var(--surface); border:1px solid var(--line); border-radius:6px; padding:18px}
+.controls{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:14px 16px}
+.field{display:flex; flex-direction:column; gap:5px; min-width:0}
+.field label{font-size:12px; color:var(--muted)}
+.field input,.field select{
+  font:inherit; font-family:var(--font-mono); font-size:15px; color:var(--ink);
+  background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:8px 9px; width:100%; min-width:0;
+}
+.field input[type=range]{padding:0; height:36px; accent-color:var(--accent)}
+.field input:focus-visible,.field select:focus-visible,button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--sky); outline-offset:2px}
+.controls-foot{display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px; margin-top:14px; padding-top:14px; border-top:1px solid var(--line); font-size:13px; color:var(--muted)}
+button{
+  font:inherit; font-size:13px; font-weight:700; color:var(--ink); background:var(--accent);
+  border:0; border-radius:4px; padding:8px 14px; cursor:pointer;
+}
+button.quiet{background:transparent; border:1px solid var(--line); font-weight:500}
+.ac-controls{display:flex; flex-direction:column; gap:12px; margin-top:18px; padding-top:16px; border-top:1px solid var(--line)}
+svg .temp{fill:none; stroke:var(--ink); stroke-width:1.6; stroke-linejoin:round; stroke-linecap:round}
+svg .band-cool{fill:var(--sky); opacity:0.24}
+svg .band-heat{fill:var(--warn); opacity:0.2}
+svg .trig-cool{fill:none; stroke:var(--sky); stroke-dasharray:4 4; stroke-width:1.3}
+svg .trig-heat{fill:none; stroke:var(--warn); stroke-dasharray:4 4; stroke-width:1.3}
+svg .band-night{fill:var(--ink); opacity:0.08}
+svg .bar-day{fill:var(--accent)}
+svg .bar-batt{fill:var(--batt)}
+.sw.day{background:var(--accent)}
+.sw.batt{background:var(--batt)}
+.sw.night{background:var(--ink); opacity:0.2}
+svg .t-cool{fill:var(--sky); font-weight:500}
+svg .t-heat{fill:var(--warn); font-weight:500}
+.legend{display:flex; flex-wrap:wrap; gap:6px 18px; font-size:12px; color:var(--muted); margin-top:10px}
+.sw{display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:6px; vertical-align:-1px}
+.sw.cool{background:var(--sky)}
+.sw.heat{background:var(--warn)}
+.sw.line{height:2px; vertical-align:3px; background:var(--ink)}
+textarea{
+  font:inherit; font-family:var(--font-mono); font-size:13px; color:var(--ink); background:var(--bg);
+  border:1px solid var(--line); border-radius:4px; padding:8px 9px; width:100%; min-width:0; resize:vertical;
+}
+.calib{display:flex; flex-wrap:wrap; align-items:flex-end; gap:10px 16px; margin-top:14px; padding-top:14px; border-top:1px solid var(--line)}
+.calib .field{width:min(100%,260px)}
+#calibOut{font-size:13px; color:var(--muted); flex:1 1 240px; min-width:0}
+
+.section-head{display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:4px 16px; margin-bottom:10px}
+.section-head p{margin:0; font-size:13px; color:var(--muted)}
+.scroll{overflow-x:auto}
+.chart{min-width:560px}
+svg{display:block; width:100%; height:auto}
+svg text{font-family:var(--font-mono); fill:var(--muted); font-size:11px}
+svg .grid{stroke:var(--line); stroke-width:1}
+svg .bar{fill:var(--accent); cursor:pointer}
+svg .bar.dim{fill:var(--accent-soft)}
+svg .bar:hover{opacity:0.85}
+svg .val{fill:var(--ink); font-weight:500}
+svg .limit{stroke:var(--warn); stroke-dasharray:4 4; stroke-width:1.2}
+svg .limit-label{fill:var(--warn)}
+svg .sel{fill:none; stroke:var(--ink); stroke-width:1.5}
+
+table{width:100%; border-collapse:collapse; font-size:14px}
+th,td{text-align:right; padding:9px 8px; border-bottom:1px solid var(--line); white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:12px; font-weight:500; color:var(--muted)}
+td.num{font-size:14px}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--bg)}
+tbody tr.on{background:var(--accent-soft)}
+tbody tr.on td:first-child{font-weight:700}
+
+.status{padding:18px; border:1px dashed var(--line); border-radius:6px; color:var(--muted)}
+.status.err{border-color:var(--warn); color:var(--ink)}
+.status.err strong{color:var(--warn)}
+.note{font-size:13px; color:var(--muted); max-width:70ch}
+.note p{margin:0 0 8px}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion: no-preference){ svg .bar{transition:opacity .15s} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow">Albury NSW &middot; −36.07, 146.91</div>
+  <h1>Albury Solar Forecast</h1>
+  <div class="headline">
+    <div class="total num" id="total">–<small>kWh</small></div>
+  </div>
+  <p class="note" id="period" style="margin:0"></p>
+  <dl class="stats" id="stats"></dl>
+</header>
+
+<section class="panel" aria-label="System settings">
+  <div class="controls">
+    <div class="field"><label for="size">Panels (kW)</label><input id="size" type="number" min="1" max="100" step="0.1" value="10" inputmode="decimal"></div>
+    <div class="field"><label for="inv">Inverter limit (kW AC)</label><input id="inv" type="number" min="1" max="100" step="0.1" value="10" inputmode="decimal"></div>
+    <div class="field"><label for="az">Panels face</label>
+      <select id="az">
+        <option value="180" selected>North</option>
+        <option value="135">North-east</option>
+        <option value="-135">North-west</option>
+        <option value="90">West</option>
+        <option value="-90">East</option>
+      </select>
+    </div>
+    <div class="field"><label for="tilt">Tilt (degrees)</label><input id="tilt" type="number" min="0" max="90" step="1" value="22" inputmode="numeric"></div>
+    <div class="field"><label for="eff">System efficiency (%)</label><input id="eff" type="number" min="50" max="100" step="1" value="80" inputmode="numeric"></div>
+    <div class="field"><label for="days">Days ahead: <span class="num" id="daysOut">7</span></label><input id="days" type="range" min="1" max="16" step="1" value="7"></div>
+  </div>
+  <div class="ac-controls">
+    <div class="eyebrow">Split system air conditioner</div>
+    <div class="controls">
+      <div class="field"><label for="coolAt">Day: cool above (°C)</label><input id="coolAt" type="number" min="15" max="45" step="0.5" value="28" inputmode="decimal"></div>
+      <div class="field"><label for="heatAt">Day: heat below (°C)</label><input id="heatAt" type="number" min="0" max="30" step="0.5" value="18" inputmode="decimal"></div>
+      <div class="field"><label for="nCoolAt">Night: cool above (°C)</label><input id="nCoolAt" type="number" min="15" max="45" step="0.5" value="26" inputmode="decimal"></div>
+      <div class="field"><label for="nHeatAt">Night: heat below (°C)</label><input id="nHeatAt" type="number" min="0" max="30" step="0.5" value="17" inputmode="decimal"></div>
+      <div class="field"><label for="nStart">Night starts</label><select id="nStart"></select></div>
+      <div class="field"><label for="nEnd">Night ends</label><select id="nEnd"></select></div>
+      <div class="field"><label for="acKw">Power draw (kW)</label><input id="acKw" type="number" min="0.1" max="20" step="0.1" value="1.2" inputmode="decimal"></div>
+    </div>
+    <p class="note" id="acMsg" style="margin:0"></p>
+  </div>
+  <div class="controls-foot">
+    <button id="refresh" type="button">Refresh forecast</button>
+    <span id="fetched">Not loaded yet</span>
+  </div>
+  <div class="calib">
+    <div class="field"><label for="peak">Highest kW you saw in the last 3 days</label><input id="peak" type="number" min="0.5" max="100" step="0.1" value="7.5" inputmode="decimal"></div>
+    <button id="calib" type="button" class="quiet">Match my last 3 days</button>
+    <span id="calibOut"></span>
+  </div>
+</section>
+
+<div id="status" class="status" role="status">Loading forecast from Open-Meteo…</div>
+
+<section class="panel" id="manual" hidden>
+  <div class="section-head"><h2>Load the forecast by hand</h2></div>
+  <ol class="note" style="padding-left:20px">
+    <li>Open the <a id="dataLink" href="#" target="_blank" rel="noopener">forecast data page</a>. It shows plain text.</li>
+    <li>Select all of it, copy it, and paste it below.</li>
+    <li>Press Use pasted data.</li>
+  </ol>
+  <div class="field"><label for="paste">Pasted forecast text</label><textarea id="paste" rows="5" placeholder='Starts with {"latitude":'></textarea></div>
+  <div class="controls-foot" style="border-top:0; margin-top:10px; padding-top:0">
+    <button id="usePaste" type="button">Use pasted data</button>
+    <span id="pasteMsg"></span>
+  </div>
+</section>
+
+<main id="main" hidden style="display:contents">
+  <section class="panel">
+    <div class="section-head"><h2>Solar energy per day</h2><p>Tap a bar to see its hours</p></div>
+    <div class="scroll"><div class="chart" id="dailyChart"></div></div>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><h2 id="hourTitle">Hourly output</h2><p id="hourSub"></p></div>
+    <div class="scroll"><div class="chart" id="hourChart"></div></div>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><h2>Temperature and air conditioning</h2><p id="tempSub"></p></div>
+    <dl class="stats" id="acStats" style="margin:0 0 14px"></dl>
+    <div class="scroll"><div class="chart" id="tempChart"></div></div>
+    <div class="legend">
+      <span><i class="sw line"></i>Forecast temperature</span>
+      <span><i class="sw night"></i>Night</span>
+      <span><i class="sw cool"></i>Cooling hours</span>
+      <span><i class="sw heat"></i>Heating hours</span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><h2>Air conditioner energy per day</h2><p>Split by when the energy is needed</p></div>
+    <dl class="stats" id="acSplit" style="margin:0 0 14px"></dl>
+    <div class="scroll"><div class="chart" id="acChart"></div></div>
+    <div class="legend">
+      <span><i class="sw day"></i>Daytime, with solar</span>
+      <span><i class="sw batt"></i>Dusk to dawn, on battery</span>
+    </div>
+    <p class="note" style="margin:10px 0 0">Daytime means hours with sunlight on the panels. Dusk to dawn means hours with almost none, so that energy has to come from your battery. Each calendar day includes the hours after midnight and before sunrise, which draw on the battery charged the day before.</p>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><h2>Day by day</h2></div>
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Day</th><th>Solar (kWh)</th><th>Peak (kW)</th><th>Low–high (°C)</th><th>Air con (h)</th><th>Air con (kWh)</th><th>Daytime (kWh)</th><th>Dusk–dawn (kWh)</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<section class="note">
+  <p><strong>How it works.</strong> The page asks Open-Meteo for hourly sunlight landing on a surface with your tilt and direction, using the weather models it blends for this location. Each hour: panel kW × sunlight ÷ 1000 × system efficiency × a heat factor (panels lose about 0.35% per °C of cell temperature above 25 °C), then capped at your inverter limit.</p>
+  <p><strong>Air conditioner.</strong> Each hour uses your night limits or your day limits, depending on the clock. An hour above that period's cooling limit counts as cooling, and an hour below its heating limit counts as heating. Each hour of use is charged at the power draw you set. The forecast is outdoor air temperature, so set each limit as the outdoor temperature at which you would switch the unit on.</p>
+  <p>Treat results as a planning estimate. Shading, dirt, panel age and inverter behaviour are not known to the forecast. System efficiency of around 80% is a typical starting point; adjust it once you compare a few days against your real meter or inverter app.</p>
+  <p>Forecast data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. Times are Albury local time.</p>
+</section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var LAT = -36.0737, LON = 146.9135, TZ = "Australia/Sydney";
+  var els = {};
+  ["acChart","acSplit","nCoolAt","nHeatAt","nStart","nEnd","coolAt","heatAt","acKw","acMsg","acStats","tempChart","tempSub","manual","dataLink","paste","usePaste","pasteMsg","size","inv","az","tilt","eff","days","daysOut","peak","calib","calibOut","refresh","fetched","status","main","total","period","stats","dailyChart","hourChart","hourTitle","hourSub","rows"]
+    .forEach(function(id){ els[id] = document.getElementById(id); });
+
+  var raw = null;          // { key, time[], gti[], temp[], cloud[], fetchedAt }
+  var daysData = [];       // computed per-day summaries (today onward)
+  var pastData = [];       // the three days before today, used to calibrate
+  var selected = 0;
+  var timer = null;
+  var ctrl = null;
+
+  /* ---------- saved settings (convenience only) ---------- */
+  [els.nStart, els.nEnd].forEach(function(sel, k){
+    for (var h = 0; h < 24; h++){
+      var o = document.createElement("option");
+      o.value = h;
+      o.textContent = (h % 12 === 0 ? 12 : h % 12) + (h < 12 ? " am" : " pm");
+      sel.appendChild(o);
+    }
+    sel.value = k === 0 ? "22" : "7";
+  });
+  var KEYS = ["size","inv","az","tilt","eff","days","peak","coolAt","heatAt","nCoolAt","nHeatAt","nStart","nEnd","acKw"];
+  try {
+    var saved = JSON.parse(localStorage.getItem("albury-solar") || "{}");
+    KEYS.forEach(function(k){ if (saved[k] != null && els[k]) els[k].value = saved[k]; });
+  } catch(e){}
+  function save(){
+    try {
+      var o = {}; KEYS.forEach(function(k){ o[k] = els[k].value; });
+      localStorage.setItem("albury-solar", JSON.stringify(o));
+    } catch(e){}
+  }
+
+  function num(el, lo, hi, fallback){
+    var v = parseFloat(el.value);
+    if (!isFinite(v)) return fallback;
+    return Math.min(hi, Math.max(lo, v));
+  }
+  function settings(){
+    return {
+      size: num(els.size, 0.1, 100, 10),
+      inv:  num(els.inv, 0.1, 100, 10),
+      az:   parseInt(els.az.value, 10),
+      tilt: Math.round(num(els.tilt, 0, 90, 22)),
+      eff:  num(els.eff, 50, 100, 85) / 100,
+      days: Math.round(num(els.days, 1, 16, 7)),
+      coolAt: num(els.coolAt, 15, 45, 28),
+      heatAt: num(els.heatAt, 0, 30, 18),
+      nCoolAt: num(els.nCoolAt, 15, 45, 26),
+      nHeatAt: num(els.nHeatAt, 0, 30, 17),
+      nStart: isNaN(parseInt(els.nStart.value, 10)) ? 22 : parseInt(els.nStart.value, 10),
+      nEnd: isNaN(parseInt(els.nEnd.value, 10)) ? 7 : parseInt(els.nEnd.value, 10),
+      acKw: num(els.acKw, 0.1, 20, 1.2)
+    };
+  }
+  function keyFor(s){ return [s.tilt, s.az, s.days].join("|"); }
+
+  /* ---------- forecast fetch ---------- */
+  function load(force){
+    var s = settings();
+    var key = keyFor(s);
+    if (!force && raw && raw.key === key) { render(); return; }
+    if (ctrl) ctrl.abort();
+    ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+    showStatus("Loading forecast from Open-Meteo…", false);
+    var url = apiUrl(s);
+    els.dataLink.href = url;
+    fetch(url, ctrl ? { signal: ctrl.signal } : undefined)
+      .then(function(r){
+        if (!r.ok) throw new Error("Open-Meteo answered " + r.status);
+        return r.json();
+      })
+      .then(function(j){
+        ingest(j, key);
+      })
+      .catch(function(err){
+        if (err && err.name === "AbortError") return;
+        showStatus("Could not load the forecast automatically. " + (err && err.message ? err.message : "") +
+          " This usually means the viewer you opened the file in blocks internet access from the page. Try a normal browser tab (Chrome, Safari, Edge), or use the manual steps below.", true);
+        els.manual.hidden = false;
+      });
+  }
+
+  function apiUrl(s){
+    return "https://api.open-meteo.com/v1/forecast"
+      + "?latitude=" + LAT + "&longitude=" + LON
+      + "&hourly=global_tilted_irradiance,temperature_2m,cloud_cover"
+      + "&tilt=" + s.tilt + "&azimuth=" + s.az
+      + "&forecast_days=" + s.days + "&past_days=3"
+      + "&timezone=" + encodeURIComponent(TZ);
+  }
+
+  function ingest(j, key){
+    if (!j || !j.hourly || !j.hourly.time || !j.hourly.global_tilted_irradiance) throw new Error("Unexpected response from Open-Meteo");
+    raw = {
+      key: key,
+      time: j.hourly.time,
+      gti: j.hourly.global_tilted_irradiance,
+      temp: j.hourly.temperature_2m || [],
+      cloud: j.hourly.cloud_cover || [],
+      fetchedAt: new Date()
+    };
+    selected = 0;
+    els.manual.hidden = true;
+    render();
+  }
+
+  els.usePaste.addEventListener("click", function(){
+    var s = settings();
+    els.dataLink.href = apiUrl(s);
+    try {
+      var j = JSON.parse(els.paste.value.trim());
+      ingest(j, keyFor(s));
+      els.pasteMsg.textContent = "";
+    } catch(e){
+      els.pasteMsg.textContent = "That text is not the forecast data. Copy everything on the data page, starting with { and ending with }.";
+    }
+  });
+
+  function showStatus(msg, isErr){
+    els.status.hidden = false;
+    els.status.className = "status" + (isErr ? " err" : "");
+    els.status.innerHTML = (isErr ? "<strong>Forecast unavailable.</strong> " : "") + escapeHtml(msg);
+    if (isErr) els.main.hidden = true;
+  }
+  function escapeHtml(t){ return String(t).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+
+  /* ---------- energy model ---------- */
+  function hourKw(g, t, s){
+    if (g == null || !isFinite(g) || g <= 0) return 0;
+    var tair = (t == null || !isFinite(t)) ? 20 : t;
+    var cell = tair + g * 0.031;                       // roughly NOCT-based cell heating
+    var heat = 1 - 0.0035 * (cell - 25);
+    heat = Math.min(1.08, Math.max(0.8, heat));
+    var dc = s.size * (g / 1000) * s.eff * heat;
+    return Math.min(dc, s.inv);
+  }
+
+  function isNight(h, s){
+    if (s.nStart === s.nEnd) return false;
+    return s.nStart > s.nEnd ? (h >= s.nStart || h < s.nEnd) : (h >= s.nStart && h < s.nEnd);
+  }
+  function limitsFor(h, s){
+    var night = isNight(h, s);
+    return night
+      ? { night: true, cool: s.nCoolAt, heat: s.nHeatAt }
+      : { night: false, cool: s.coolAt, heat: s.heatAt };
+  }
+
+  function compute(){
+    var s = settings();
+    var map = {}, order = [];
+    for (var i = 0; i < raw.time.length; i++){
+      var ts = raw.time[i];
+      var d = ts.slice(0, 10), h = parseInt(ts.slice(11, 13), 10);
+      if (!map[d]) { map[d] = { date: d, kwh: 0, peak: 0, cloudSum: 0, cloudN: 0, hours: [], tmin: null, tmax: null, acH: 0, cool: 0, heat: 0, acKwh: 0, covered: 0, acSun: 0, acBatt: 0 }; order.push(d); }
+      var kw = hourKw(raw.gti[i], raw.temp[i], s);
+      var o = map[d];
+      o.kwh += kw;                                      // hourly mean kW over one hour = kWh
+      if (kw > o.peak) o.peak = kw;
+      if (raw.gti[i] > 20 && raw.cloud[i] != null) { o.cloudSum += raw.cloud[i]; o.cloudN++; }
+      var tt = raw.temp[i];
+      var tOk = (tt != null && isFinite(tt));
+      var sun = raw.gti[i] != null && raw.gti[i] >= 20;   // sunlight on the panels
+      var lim = limitsFor(h, s);
+      var mode = "";
+      if (tOk && lim.heat < lim.cool){
+        if (tt > lim.cool) mode = "cool";
+        else if (tt < lim.heat) mode = "heat";
+      }
+      if (tOk){
+        if (o.tmin == null || tt < o.tmin) o.tmin = tt;
+        if (o.tmax == null || tt > o.tmax) o.tmax = tt;
+      }
+      if (mode){
+        o.acH++; o[mode]++;
+        o.acKwh += s.acKw;
+        if (sun) o.acSun += s.acKw; else o.acBatt += s.acKw;
+        o.covered += Math.min(kw, s.acKw);
+      }
+      o.hours.push({ h: h, kw: kw, t: tOk ? tt : null, mode: mode, night: lim.night, coolLim: lim.cool, heatLim: lim.heat });
+    }
+    var all = order.map(function(d){
+      var o = map[d];
+      o.cloud = o.cloudN ? o.cloudSum / o.cloudN : null;
+      return o;
+    });
+    var today = todayKey();
+    daysData = all.filter(function(d){ return d.date >= today; });
+    pastData = all.filter(function(d){ return d.date < today; });
+    if (!daysData.length) daysData = all;
+    return s;
+  }
+
+  // Highest hourly output the model gives over the past days at 100% efficiency, before any inverter cap.
+  function pastUnitPeak(){
+    var today = todayKey(), best = 0;
+    for (var i = 0; i < raw.time.length; i++){
+      if (raw.time[i].slice(0, 10) >= today) continue;
+      var g = raw.gti[i];
+      if (g == null || g <= 0) continue;
+      var t = (raw.temp[i] == null) ? 20 : raw.temp[i];
+      var heat = Math.min(1.08, Math.max(0.8, 1 - 0.0035 * (t + g * 0.031 - 25)));
+      var dc = settings().size * (g / 1000) * heat;
+      if (dc > best) best = dc;
+    }
+    return best;
+  }
+  function calibrate(){
+    if (!raw) return;
+    var unit = pastUnitPeak();
+    var target = num(els.peak, 0.5, 100, 7.5);
+    if (unit <= 0) { els.calibOut.textContent = "No past sunlight data came back to compare against."; return; }
+    var e = target / unit;
+    var capped = e > 1;
+    els.eff.value = Math.round(Math.min(1, Math.max(0.5, e)) * 100);
+    save();
+    render();
+    if (capped) els.calibOut.textContent += " Your reading is higher than the model's best case, so efficiency is held at 100%.";
+  }
+  function calibNote(s){
+    var pk = 0;
+    pastData.forEach(function(d){ if (d.peak > pk) pk = d.peak; });
+    var seen = num(els.peak, 0.5, 100, 7.5);
+    els.calibOut.textContent = pastData.length
+      ? "At " + Math.round(s.eff * 100) + "% the model would have peaked at " + f1(pk) + " kW over the last " + pastData.length + " days. You saw " + f1(seen) + " kW."
+      : "";
+  }
+
+  /* ---------- formatting ---------- */
+  function dayLabel(d, long){
+    var dt = new Date(d + "T12:00:00");
+    return dt.toLocaleDateString("en-AU", long
+      ? { weekday: "long", day: "numeric", month: "short" }
+      : { weekday: "short", day: "numeric" });
+  }
+  function f1(n){ return n.toFixed(1); }
+  function todayKey(){
+    var p = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+    return p;
+  }
+
+  /* ---------- render ---------- */
+  function render(){
+    if (!raw) return;
+    var s = compute();
+    els.status.hidden = true;
+    els.main.hidden = false;
+    els.main.style.display = "contents";
+    if (selected >= daysData.length) selected = 0;
+
+    var total = 0, best = daysData[0], worst = daysData[0];
+    daysData.forEach(function(d){
+      total += d.kwh;
+      if (d.kwh > best.kwh) best = d;
+      if (d.kwh < worst.kwh) worst = d;
+    });
+    var avg = total / daysData.length;
+
+    els.total.innerHTML = Math.round(total).toLocaleString("en-AU") + "<small>kWh</small>";
+    els.period.textContent = "Expected generation from " + dayLabel(daysData[0].date, true) + " to " +
+      dayLabel(daysData[daysData.length - 1].date, true) + " (" + daysData.length + (daysData.length === 1 ? " day" : " days") +
+      "). Today counts the full day, including hours already passed.";
+    els.stats.innerHTML =
+      stat("Average per day", f1(avg) + " kWh") +
+      stat("Best day", dayLabel(best.date) + " · " + f1(best.kwh) + " kWh") +
+      stat("Weakest day", dayLabel(worst.date) + " · " + f1(worst.kwh) + " kWh") +
+      stat("Highest output", f1(Math.max.apply(null, daysData.map(function(d){ return d.peak; }))) + " kW");
+
+    els.daysOut.textContent = s.days;
+    els.fetched.textContent = "Forecast fetched " + raw.fetchedAt.toLocaleString("en-AU", { weekday: "short", hour: "numeric", minute: "2-digit" });
+
+    calibNote(s);
+    drawDaily(s);
+    drawHourly(s);
+    drawTemp(s);
+    drawAcChart(s);
+    drawRows();
+  }
+
+  function drawTemp(s){
+    var bad = [];
+    if (s.heatAt >= s.coolAt) bad.push("day");
+    if (s.nHeatAt >= s.nCoolAt) bad.push("night");
+    els.acMsg.textContent = bad.length
+      ? "The heating limit must be lower than the cooling limit (" + bad.join(" and ") + "). Those hours are switched off in the forecast until you fix it."
+      : "";
+    var flat = [], temps = [], tot = { acH: 0, cool: 0, heat: 0, kwh: 0, covered: 0 };
+    daysData.forEach(function(d, di){
+      tot.acH += d.acH; tot.cool += d.cool; tot.heat += d.heat; tot.kwh += d.acKwh; tot.covered += d.covered;
+      d.hours.forEach(function(x){
+        flat.push({ di: di, h: x.h, t: x.t, mode: x.mode, night: x.night, cool: x.coolLim, heat: x.heatLim });
+        if (x.t != null) temps.push(x.t);
+      });
+    });
+    if (!flat.length || !temps.length){ els.tempChart.innerHTML = ""; els.acStats.innerHTML = ""; return; }
+
+    var tmin = Math.min.apply(null, temps), tmax = Math.max.apply(null, temps);
+    els.tempSub.textContent = "Forecast " + Math.round(tmin) + " to " + Math.round(tmax) + " °C · Day " +
+      s.coolAt + "° / " + s.heatAt + "° · Night " + s.nCoolAt + "° / " + s.nHeatAt + "° (cool / heat)";
+    var pct = tot.kwh > 0 ? Math.round(100 * tot.covered / tot.kwh) : 0;
+    els.acStats.innerHTML =
+      stat("Cooling hours", String(tot.cool)) +
+      stat("Heating hours", String(tot.heat)) +
+      stat("Air con energy", f1(tot.kwh) + " kWh") +
+      stat("Powered by solar", tot.kwh > 0 ? f1(tot.covered) + " kWh (" + pct + "%)" : "–");
+
+    var lo = Math.floor((Math.min(tmin, s.heatAt, s.nHeatAt) - 2) / 5) * 5;
+    var hi = Math.ceil((Math.max(tmax, s.coolAt, s.nCoolAt) + 2) / 5) * 5;
+    var W = 760, H = 300, L = 44, R = 12, T = 22, B = 40;
+    var pw = W - L - R, ph = H - T - B, n = flat.length, slot = pw / n;
+    function y(v){ return T + ph - ((v - lo) / (hi - lo)) * ph; }
+    function x(i){ return L + slot * i + slot / 2; }
+    var out = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Hourly forecast temperature with night periods, comfort limits and the hours the air conditioner would run">';
+    for (var v = lo; v <= hi; v += 5){
+      out += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>';
+      out += '<text x="' + (L - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+    }
+    out += '<text x="' + L + '" y="11">°C</text>';
+    flat.forEach(function(p, i){
+      if (p.night) out += '<rect class="band-night" x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + ph + '"/>';
+    });
+    flat.forEach(function(p, i){
+      if (p.mode) out += '<rect class="band-' + p.mode + '" x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + ph + '"/>';
+    });
+
+    function stepPath(key){
+      var d = "";
+      flat.forEach(function(p, i){
+        var xs = L + slot * i, xe = xs + slot, yv = y(p[key]).toFixed(1);
+        if (i === 0) d += "M" + xs.toFixed(1) + " " + yv + " L" + xe.toFixed(1) + " " + yv + " ";
+        else if (p[key] === flat[i - 1][key]) d += "L" + xe.toFixed(1) + " " + yv + " ";
+        else d += "L" + xs.toFixed(1) + " " + yv + " L" + xe.toFixed(1) + " " + yv + " ";
+      });
+      return d;
+    }
+    out += '<path class="trig-cool" d="' + stepPath("cool") + '"/>';
+    out += '<path class="trig-heat" d="' + stepPath("heat") + '"/>';
+
+    // label the first two stretches with their limits
+    var seg = 0, labelled = 0;
+    for (var i = 0; i < n && labelled < 2; ){
+      var j = i;
+      while (j < n && flat[j].night === flat[i].night) j++;
+      if (j - i >= 5){
+        var lx = L + slot * i + 4;
+        out += '<text class="t-cool" x="' + lx + '" y="' + (y(flat[i].cool) - 5) + '">' + flat[i].cool + '°</text>';
+        out += '<text class="t-heat" x="' + lx + '" y="' + (y(flat[i].heat) + 14) + '">' + flat[i].heat + '°</text>';
+        labelled++;
+      }
+      i = j;
+    }
+
+    var path = "", pen = false;
+    flat.forEach(function(p, i){
+      if (p.t == null){ pen = false; return; }
+      path += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(p.t).toFixed(1) + " ";
+      pen = true;
+    });
+    out += '<path class="temp" d="' + path + '"/>';
+    var start = 0;
+    daysData.forEach(function(d, di){
+      var len = d.hours.length;
+      if (di > 0) out += '<line class="grid" x1="' + (L + slot * start) + '" x2="' + (L + slot * start) + '" y1="' + T + '" y2="' + (T + ph + 6) + '"/>';
+      var cx = L + slot * (start + len / 2);
+      var dt = new Date(d.date + "T12:00:00");
+      if (n / 24 <= 9) out += '<text x="' + cx + '" y="' + (H - 20) + '" text-anchor="middle">' + dt.toLocaleDateString("en-AU", { weekday: "short" }) + '</text>';
+      out += '<text x="' + cx + '" y="' + (H - 6) + '" text-anchor="middle">' + dt.getDate() + '</text>';
+      start += len;
+    });
+    out += "</svg>";
+    els.tempChart.innerHTML = out;
+  }
+  function drawAcChart(s){
+    var n = daysData.length, sun = 0, batt = 0, cov = 0;
+    daysData.forEach(function(d){ sun += d.acSun; batt += d.acBatt; cov += d.covered; });
+    els.acSplit.innerHTML =
+      stat("Air con, whole period", f1(sun + batt) + " kWh") +
+      stat("Daytime, with solar", f1(sun) + " kWh") +
+      stat("Dusk to dawn, on battery", f1(batt) + " kWh") +
+      stat("Matched by solar output", f1(cov) + " kWh");
+
+    var W = 760, H = 280, L = 44, R = 12, T = 26, B = 40;
+    var maxV = Math.max.apply(null, daysData.map(function(d){ return d.acKwh; }).concat([1]));
+    var mm = maxV * 1.12;
+    var sc = niceMax(mm, mm <= 6 ? 1 : (mm <= 12 ? 2 : 0));
+    var pw = W - L - R, ph = H - T - B;
+    var slot = pw / n, bw = Math.min(46, slot * 0.64);
+    function y(v){ return T + ph - (v / sc.max) * ph; }
+    var out = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Air conditioner kWh for each day, split between daytime and dusk to dawn">';
+    for (var v = 0; v <= sc.max + 0.001; v += sc.step){
+      out += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>';
+      out += '<text x="' + (L - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+    }
+    out += '<text x="' + L + '" y="12">kWh</text>';
+    daysData.forEach(function(d, i){
+      var cx = L + slot * i + slot / 2;
+      var base = T + ph, yMid = y(d.acSun), yTop = y(d.acKwh);
+      out += '<g><title>' + dayLabel(d.date, true) + ': daytime ' + f1(d.acSun) + ' kWh, dusk to dawn ' + f1(d.acBatt) + ' kWh</title>';
+      out += '<rect class="bar-day" x="' + (cx - bw / 2) + '" y="' + yMid + '" width="' + bw + '" height="' + Math.max(0, base - yMid) + '"/>';
+      out += '<rect class="bar-batt" x="' + (cx - bw / 2) + '" y="' + yTop + '" width="' + bw + '" height="' + Math.max(0, yMid - yTop) + '"/></g>';
+      out += '<text class="val" x="' + cx + '" y="' + (yTop - 7) + '" text-anchor="middle">' + f1(d.acKwh) + '</text>';
+      var dt = new Date(d.date + "T12:00:00");
+      out += '<text x="' + cx + '" y="' + (H - 20) + '" text-anchor="middle">' + dt.toLocaleDateString("en-AU", { weekday: "short" }) + '</text>';
+      out += '<text x="' + cx + '" y="' + (H - 6) + '" text-anchor="middle">' + dt.getDate() + '</text>';
+    });
+    out += "</svg>";
+    els.acChart.innerHTML = out;
+  }
+  function stat(k, v){ return "<div><dt>" + escapeHtml(k) + "</dt><dd>" + escapeHtml(v) + "</dd></div>"; }
+
+  function niceMax(m, steps){
+    var step = m <= 20 ? 5 : (m <= 60 ? 10 : (m <= 150 ? 20 : 50));
+    if (steps) step = steps;
+    return { max: Math.max(step, Math.ceil(m / step) * step), step: step };
+  }
+
+  function drawDaily(s){
+    var W = 760, H = 300, L = 44, R = 12, T = 26, B = 40;
+    var n = daysData.length;
+    var maxV = Math.max.apply(null, daysData.map(function(d){ return d.kwh; }));
+    var sc = niceMax(maxV * 1.1);
+    var pw = W - L - R, ph = H - T - B;
+    var slot = pw / n, bw = Math.min(46, slot * 0.64);
+    function y(v){ return T + ph - (v / sc.max) * ph; }
+    var out = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Expected kWh for each day">';
+    for (var v = 0; v <= sc.max + 0.001; v += sc.step){
+      out += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>';
+      out += '<text x="' + (L - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+    }
+    out += '<text x="' + L + '" y="12">kWh</text>';
+    var today = todayKey();
+    daysData.forEach(function(d, i){
+      var cx = L + slot * i + slot / 2;
+      var top = y(d.kwh), hgt = Math.max(1, T + ph - top);
+      out += '<rect class="bar' + (i === selected ? "" : " dim") + '" data-i="' + i + '" tabindex="0" role="button" aria-label="' +
+        dayLabel(d.date, true) + ", " + f1(d.kwh) + ' kWh" x="' + (cx - bw / 2) + '" y="' + top + '" width="' + bw + '" height="' + hgt + '" rx="2"/>';
+      if (i === selected) out += '<rect class="sel" x="' + (cx - bw / 2 - 2) + '" y="' + (top - 2) + '" width="' + (bw + 4) + '" height="' + (hgt + 2) + '" rx="3"/>';
+      out += '<text class="val" x="' + cx + '" y="' + (top - 7) + '" text-anchor="middle">' + Math.round(d.kwh) + '</text>';
+      var dt = new Date(d.date + "T12:00:00");
+      out += '<text x="' + cx + '" y="' + (H - 20) + '" text-anchor="middle">' + dt.toLocaleDateString("en-AU", { weekday: "short" }) + (d.date === today ? "*" : "") + '</text>';
+      out += '<text x="' + cx + '" y="' + (H - 6) + '" text-anchor="middle">' + dt.getDate() + '</text>';
+    });
+    out += "</svg>";
+    els.dailyChart.innerHTML = out;
+  }
+
+  function drawHourly(s){
+    var d = daysData[selected];
+    els.hourTitle.textContent = dayLabel(d.date, true) + ": " + f1(d.kwh) + " kWh";
+    els.hourSub.textContent = "Peak " + f1(d.peak) + " kW" + (d.cloud != null ? " · average daytime cloud " + Math.round(d.cloud) + "%" : "") +
+      " · air con " + d.acH + " h (" + f1(d.acKwh) + " kWh)";
+    var hrs = d.hours.filter(function(x){ return x.h >= 5 && x.h <= 21; });
+    var W = 760, H = 250, L = 44, R = 12, T = 22, B = 30;
+    var peak = Math.max.apply(null, hrs.map(function(x){ return x.kw; }).concat([0.1]));
+    var clipLine = s.inv < s.size;
+    var sc = niceMax(Math.max(peak, clipLine ? s.inv : 0) * 1.15, 2);
+    var pw = W - L - R, ph = H - T - B;
+    var slot = pw / hrs.length, bw = slot * 0.7;
+    function y(v){ return T + ph - (v / sc.max) * ph; }
+    var out = '<svg viewBox="0 0 ' + W + " " + H + '" role="img" aria-label="Hourly kW for the selected day">';
+    for (var v = 0; v <= sc.max + 0.001; v += sc.step){
+      out += '<line class="grid" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '"/>';
+      out += '<text x="' + (L - 8) + '" y="' + (y(v) + 4) + '" text-anchor="end">' + v + '</text>';
+    }
+    out += '<text x="' + L + '" y="11">kW</text>';
+    hrs.forEach(function(x, i){
+      var cx = L + slot * i + slot / 2;
+      var top = y(x.kw), hgt = Math.max(0, T + ph - top);
+      out += '<rect class="bar" style="cursor:default" x="' + (cx - bw / 2) + '" y="' + top + '" width="' + bw + '" height="' + hgt + '" rx="1.5"/>';
+      if (i % 2 === 0) out += '<text x="' + cx + '" y="' + (H - 10) + '" text-anchor="middle">' + (x.h % 12 === 0 ? 12 : x.h % 12) + (x.h < 12 ? "am" : "pm") + '</text>';
+    });
+    if (clipLine){
+      out += '<line class="limit" x1="' + L + '" x2="' + (W - R) + '" y1="' + y(s.inv) + '" y2="' + y(s.inv) + '"/>';
+      out += '<text class="limit-label" x="' + (W - R) + '" y="' + (y(s.inv) - 5) + '" text-anchor="end">inverter limit ' + s.inv + ' kW</text>';
+    }
+    out += "</svg>";
+    els.hourChart.innerHTML = out;
+  }
+
+  function drawRows(){
+    els.rows.innerHTML = daysData.map(function(d, i){
+      return '<tr data-i="' + i + '" class="' + (i === selected ? "on" : "") + '">' +
+        "<td>" + dayLabel(d.date, true) + "</td>" +
+        '<td class="num">' + f1(d.kwh) + "</td>" +
+        '<td class="num">' + f1(d.peak) + "</td>" +
+        '<td class="num">' + (d.tmin == null ? "–" : Math.round(d.tmin) + "–" + Math.round(d.tmax)) + "</td>" +
+        '<td class="num">' + d.acH + "</td>" +
+        '<td class="num">' + f1(d.acKwh) + "</td>" +
+        '<td class="num">' + f1(d.acSun) + "</td>" +
+        '<td class="num">' + f1(d.acBatt) + "</td></tr>";
+    }).join("");
+  }
+
+  /* ---------- interactions ---------- */
+  function pick(i){
+    if (isNaN(i) || i === selected) return;
+    selected = i;
+    var s = settings();
+    drawDaily(s); drawHourly(s); drawRows();
+  }
+  els.dailyChart.addEventListener("click", function(e){
+    var r = e.target.closest("[data-i]"); if (r) pick(parseInt(r.getAttribute("data-i"), 10));
+  });
+  els.dailyChart.addEventListener("keydown", function(e){
+    if (e.key !== "Enter" && e.key !== " ") return;
+    var r = e.target.closest("[data-i]"); if (r){ e.preventDefault(); pick(parseInt(r.getAttribute("data-i"), 10)); }
+  });
+  els.rows.addEventListener("click", function(e){
+    var r = e.target.closest("tr[data-i]"); if (r) pick(parseInt(r.getAttribute("data-i"), 10));
+  });
+
+  // Efficiency, size and inverter limit recalculate instantly; tilt, direction and days need a new forecast request.
+  ["nStart","nEnd"].forEach(function(k){
+    els[k].addEventListener("change", function(){ save(); if (raw) render(); });
+  });
+  ["size","inv","eff","coolAt","heatAt","nCoolAt","nHeatAt","acKw"].forEach(function(k){
+    els[k].addEventListener("input", function(){ save(); if (raw) render(); });
+  });
+  els.az.addEventListener("change", function(){ save(); load(false); });
+  ["tilt","days"].forEach(function(k){
+    els[k].addEventListener("input", function(){
+      els.daysOut.textContent = settings().days;
+      save();
+      clearTimeout(timer);
+      timer = setTimeout(function(){ load(false); }, 450);
+    });
+  });
+  els.peak.addEventListener("input", function(){ save(); if (raw) calibNote(settings()); });
+  els.calib.addEventListener("click", calibrate);
+  els.refresh.addEventListener("click", function(){ load(true); });
+
+  els.daysOut.textContent = settings().days;
+  load(true);
+})();
+</script>
+</body>
+</html>
