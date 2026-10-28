@@ -94,6 +94,7 @@ svg .solar-mark{stroke:var(--ink); stroke-width:2.5}
   font:inherit; font-family:var(--font-mono); font-size:14px; color:var(--ink); background:var(--bg);
   border:1px solid var(--line); border-radius:4px; padding:6px 2px; width:58px; text-align:center;
 }
+.planner input.name{width:128px; text-align:left; padding:6px 8px; font-family:var(--font-body); font-weight:500}
 .planner input:focus-visible,.slot:focus-visible{outline:2px solid var(--sky); outline-offset:2px}
 .slots{display:flex; flex-direction:column; gap:4px}
 .slot{
@@ -221,7 +222,7 @@ tbody tr.on td:first-child{font-weight:700}
     <span><i class="sw day"></i>Dawn–dusk, with solar</span>
     <span><i class="sw batt"></i>Dusk–dawn, on battery</span>
   </div>
-  <p class="note" style="margin:10px 0 0">The plan is an example, so set the days you really use each appliance. Every forecast day uses the plan for its weekday, so a forecast longer than seven days repeats the week. Energy per use and hours per use are typical figures, not measurements.</p>
+  <p class="note" style="margin:10px 0 0">The plan is an example, so set the days you really use each appliance. Every forecast day uses the plan for its weekday, so a forecast longer than seven days repeats the week. Energy per use and hours per use are typical figures, not measurements. The last three rows are blank: type a name, then set the energy, hours and days for anything else you want to track.</p>
 </section>
 
 <div id="status" class="status" role="status">Loading forecast from Open-Meteo…</div>
@@ -344,7 +345,11 @@ tbody tr.on td:first-child{font-weight:700}
     { id: "ck", name: "Induction cooktop", kwh: 1.1, hrs: 0.75, days: ALLDAYS,   state: 2 },
     { id: "ov", name: "Oven",              kwh: 1.5, hrs: 1,    days: [2,5,0],   state: 2 },
     { id: "dw", name: "Dishwasher",        kwh: 1.0, hrs: 2,    days: ALLDAYS,   state: 2 },
-    { id: "hw", name: "Hot water system",  kwh: 5,   hrs: 1.5,  days: ALLDAYS,   state: 1 }
+    { id: "hw", name: "Hot water system",  kwh: 5,   hrs: 1.5,  days: ALLDAYS,   state: 1 },
+    // Blank rows the user names themselves
+    { id: "c1", name: "Custom appliance 1", custom: true, kwh: 1, hrs: 1, days: [], state: 1 },
+    { id: "c2", name: "Custom appliance 2", custom: true, kwh: 1, hrs: 1, days: [], state: 1 },
+    { id: "c3", name: "Custom appliance 3", custom: true, kwh: 1, hrs: 1, days: [], state: 1 }
   ];
   var WEEK = [{ d: 1, n: "Mon" }, { d: 2, n: "Tue" }, { d: 3, n: "Wed" }, { d: 4, n: "Thu" }, { d: 5, n: "Fri" }, { d: 6, n: "Sat" }, { d: 0, n: "Sun" }];
   var DAYNAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
@@ -364,7 +369,26 @@ tbody tr.on td:first-child{font-weight:700}
     });
   } catch(e){}
   function savePlan(){ try { localStorage.setItem("albury-solar-plan", JSON.stringify(plan)); } catch(e){} }
-  function appName(id){ var n = ""; APPS.forEach(function(a){ if (a.id === id) n = a.name; }); return n; }
+  function appName(id){
+    var n = "";
+    APPS.forEach(function(a){
+      if (a.id !== id) return;
+      n = a.name;
+      if (a.custom && els[id + "Name"] && els[id + "Name"].value.trim()) n = els[id + "Name"].value.trim();
+    });
+    return n;
+  }
+  function refreshLabels(id){
+    var nm = appName(id);
+    WEEK.forEach(function(w){
+      [0, 1].forEach(function(k){
+        var b = document.getElementById(id + "S" + w.d + "_" + k);
+        if (b) b.setAttribute("aria-label", slotLabel(id, w.d, k, plan[id][w.d][k]));
+      });
+    });
+    document.getElementById(id + "Kwh").setAttribute("aria-label", nm + " kWh per use");
+    document.getElementById(id + "Hrs").setAttribute("aria-label", nm + " hours per use");
+  }
   function slotLabel(id, dow, k, st){
     return appName(id) + ", " + DAYNAMES[dow] + ", use " + (k + 1) + ": " + STATE_LABEL[st] + ". Press to change.";
   }
@@ -374,7 +398,9 @@ tbody tr.on td:first-child{font-weight:700}
       WEEK.map(function(w){ return '<th scope="col"' + (w.d === todayDow ? ' class="today"' : "") + '>' + w.n + (w.d === todayDow ? "<br>today" : "") + '</th>'; }).join("") +
     '</tr></thead><tbody>' +
     APPS.map(function(a){
-      return '<tr><th scope="row">' + a.name + '</th>' +
+      return '<tr>' + (a.custom
+        ? '<th scope="row"><input class="name" id="' + a.id + 'Name" data-app="' + a.id + '" type="text" maxlength="28" placeholder="Add appliance" aria-label="' + a.name + ' name"></th>'
+        : '<th scope="row">' + a.name + '</th>') +
         '<td><input id="' + a.id + 'Kwh" type="number" min="0" max="50" step="0.1" value="' + a.kwh + '" inputmode="decimal" aria-label="' + a.name + ' kWh per use"></td>' +
         '<td><input id="' + a.id + 'Hrs" type="number" min="0" max="24" step="0.25" value="' + a.hrs + '" inputmode="decimal" aria-label="' + a.name + ' hours per use"></td>' +
         WEEK.map(function(w){
@@ -391,6 +417,7 @@ tbody tr.on td:first-child{font-weight:700}
   var appKeys = [];
   APPS.forEach(function(a){
     ["Kwh", "Hrs"].forEach(function(k){ els[a.id + k] = document.getElementById(a.id + k); appKeys.push(a.id + k); });
+    if (a.custom){ els[a.id + "Name"] = document.getElementById(a.id + "Name"); appKeys.push(a.id + "Name"); }
   });
   var KEYS = ["size","inv","az","tilt","eff","days","peak","coolAt","heatAt","nCoolAt","nHeatAt","nStart","nEnd","acKw"].concat(appKeys);
   try {
@@ -998,13 +1025,17 @@ tbody tr.on td:first-child{font-weight:700}
     if (raw) render(); else updateApps();
   });
   els.appPlan.addEventListener("input", function(e){
-    if (e.target.matches("input")){ save(); if (raw) render(); else updateApps(); }
+    if (e.target.matches("input")){
+      if (e.target.classList.contains("name")) refreshLabels(e.target.getAttribute("data-app"));
+      save(); if (raw) render(); else updateApps();
+    }
   });
   els.peak.addEventListener("input", function(){ save(); if (raw) calibNote(settings()); });
   els.calib.addEventListener("click", calibrate);
   els.refresh.addEventListener("click", function(){ load(true); });
 
   els.daysOut.textContent = settings().days;
+  APPS.forEach(function(a){ if (a.custom) refreshLabels(a.id); });
   updateApps();
   load(true);
 })();
