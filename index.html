@@ -12,7 +12,7 @@
    hourly profile for the chosen day, then a daily table. Amber marks energy; blue-grey marks sky. */
 :root{
   --bg:#EDF0F1; --surface:#F8FAFA; --ink:#13232B; --muted:#586A72; --line:#CDD6DA;
-  --accent:#D98E04; --accent-soft:#F1D9A4; --sky:#4A7A93; --warn:#B3402A; --batt:#5B55A0;
+  --accent:#D98E04; --accent-soft:#F1D9A4; --sky:#4A7A93; --warn:#B3402A; --batt:#5B55A0; --batt-soft:#DCD9EF;
   --font-display:"Archivo","Helvetica Neue",Arial,sans-serif;
   --font-body:"Archivo","Helvetica Neue",Arial,sans-serif;
   --font-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
@@ -20,12 +20,12 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     --bg:#0E171B; --surface:#152127; --ink:#E6EEF0; --muted:#8FA2AA; --line:#27373E;
-    --accent:#F2B233; --accent-soft:#5A4410; --sky:#7FB0C8; --warn:#E37A62; --batt:#A9A3E6; color-scheme:dark;
+    --accent:#F2B233; --accent-soft:#5A4410; --sky:#7FB0C8; --warn:#E37A62; --batt:#A9A3E6; --batt-soft:#38336B; color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0E171B; --surface:#152127; --ink:#E6EEF0; --muted:#8FA2AA; --line:#27373E;
-  --accent:#F2B233; --accent-soft:#5A4410; --sky:#7FB0C8; --warn:#E37A62; --batt:#A9A3E6; color-scheme:dark;
+  --accent:#F2B233; --accent-soft:#5A4410; --sky:#7FB0C8; --warn:#E37A62; --batt:#A9A3E6; --batt-soft:#38336B; color-scheme:dark;
 }
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -81,13 +81,27 @@ svg .bar-batt{fill:var(--batt)}
 .sw.batt{background:var(--batt)}
 .sw.mark{height:3px; vertical-align:3px; background:var(--ink)}
 svg .solar-mark{stroke:var(--ink); stroke-width:2.5}
-.appgrid{display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:14px}
-.appcard{border:1px solid var(--line); border-radius:6px; padding:14px; display:flex; flex-direction:column; gap:10px; min-width:0}
-.appcard h3{margin:0; font-family:var(--font-display); font-size:15px; font-weight:700}
-.appfields{display:grid; grid-template-columns:1fr 1fr; gap:10px}
-.appfields .wide{grid-column:1 / -1}
-.appout{margin:0; font-size:13px; color:var(--muted)}
-.appout strong{color:var(--ink); font-family:var(--font-mono); font-weight:500}
+.planner th,.planner td{text-align:center; padding:8px 4px; white-space:nowrap; vertical-align:middle}
+.planner th:first-child,.planner td:first-child{text-align:left; min-width:124px}
+.planner tbody tr,.planner tfoot tr{cursor:default}
+.planner tbody tr:hover{background:transparent}
+.planner tbody th{font-size:14px; font-weight:700; color:var(--ink)}
+.planner tfoot th{font-size:12px; font-weight:500; color:var(--muted)}
+.planner tfoot td,.planner tfoot th{border-top:1px solid var(--line)}
+.planner tfoot tr + tr td,.planner tfoot tr + tr th{border-top:0}
+.planner th.today{color:var(--ink); font-weight:700; box-shadow:inset 0 -2px 0 var(--accent)}
+.planner input{
+  font:inherit; font-family:var(--font-mono); font-size:14px; color:var(--ink); background:var(--bg);
+  border:1px solid var(--line); border-radius:4px; padding:6px 2px; width:58px; text-align:center;
+}
+.planner input:focus-visible,.slot:focus-visible{outline:2px solid var(--sky); outline-offset:2px}
+.slots{display:flex; flex-direction:column; gap:4px}
+.slot{
+  font:inherit; font-family:var(--font-mono); font-size:11px; font-weight:500; color:var(--muted);
+  background:transparent; border:1px solid var(--line); border-radius:4px; padding:5px 2px; width:100%; min-width:70px; cursor:pointer;
+}
+.slot[data-s="1"]{background:var(--accent-soft); border-color:var(--accent); color:var(--ink)}
+.slot[data-s="2"]{background:var(--batt-soft); border-color:var(--batt); color:var(--ink)}
 th:first-child,td:first-child{position:sticky; left:0; background:var(--surface); z-index:1}
 tbody tr:hover td:first-child{background:var(--bg)}
 tbody tr.on td:first-child{background:var(--accent-soft)}
@@ -197,6 +211,19 @@ tbody tr.on td:first-child{font-weight:700}
   </div>
 </section>
 
+<section class="panel" id="appliances" aria-label="Appliance plan">
+  <div class="section-head"><h2>Appliances</h2><p>Plan each weekday. Two slots a day allow up to two uses.</p></div>
+  <dl class="stats" id="appSummary" style="margin:0 0 14px"></dl>
+  <div class="scroll"><table class="planner" id="appPlan"></table></div>
+  <div class="legend">
+    <span>Tap a slot to change it:</span>
+    <span>Off</span>
+    <span><i class="sw day"></i>Dawn–dusk, with solar</span>
+    <span><i class="sw batt"></i>Dusk–dawn, on battery</span>
+  </div>
+  <p class="note" style="margin:10px 0 0">The plan is an example, so set the days you really use each appliance. Every forecast day uses the plan for its weekday, so a forecast longer than seven days repeats the week. Energy per use and hours per use are typical figures, not measurements.</p>
+</section>
+
 <div id="status" class="status" role="status">Loading forecast from Open-Meteo…</div>
 
 <section class="panel" id="manual" hidden>
@@ -248,13 +275,6 @@ tbody tr.on td:first-child{font-weight:700}
   </section>
 
   <section class="panel">
-    <div class="section-head"><h2>Appliances</h2><p>Typical starting values. Replace them with your own.</p></div>
-    <dl class="stats" id="appSummary" style="margin:0 0 14px"></dl>
-    <div class="appgrid" id="appCards"></div>
-    <p class="note" style="margin:12px 0 0">Energy per day is uses per day × kWh per use. Use a fraction for things you do less than daily, for example 0.5 for every second day. The When setting decides whether the energy counts as dawn to dusk (sun up, solar available) or dusk to dawn (battery). The same amount is applied to every forecast day.</p>
-  </section>
-
-  <section class="panel">
     <div class="section-head"><h2>Energy summary</h2><p>Air conditioner and appliances combined</p></div>
     <dl class="stats" id="sumStats" style="margin:0 0 14px"></dl>
     <div class="scroll"><div class="chart" id="sumChart"></div></div>
@@ -283,7 +303,7 @@ tbody tr.on td:first-child{font-weight:700}
 <section class="note">
   <p><strong>How it works.</strong> The page asks Open-Meteo for hourly sunlight landing on a surface with your tilt and direction, using the weather models it blends for this location. Each hour: panel kW × sunlight ÷ 1000 × system efficiency × a heat factor (panels lose about 0.35% per °C of cell temperature above 25 °C), then capped at your inverter limit.</p>
   <p><strong>Air conditioner.</strong> Each hour uses your night limits or your day limits, depending on the clock. An hour above that period's cooling limit counts as cooling, and an hour below its heating limit counts as heating. Each hour of use is charged at the power draw you set. The forecast is outdoor air temperature, so set each limit as the outdoor temperature at which you would switch the unit on.</p>
-  <p><strong>Appliances.</strong> The starting values for the washing machine, dryer, induction cooktop, oven, dishwasher and hot water system are typical household figures, not your measurements. Check the energy label or manual, or your meter, and overwrite them. Hot water in particular varies a lot between an electric element and a heat pump.</p>
+  <p><strong>Appliances.</strong> Each appliance has a weekly plan with two slots per day. A slot set to dawn to dusk counts its energy against solar, and a slot set to dusk to dawn counts it against the battery. Energy per use and hours per use start as typical household figures, not your measurements. Check the energy label or manual, or your meter, and overwrite them. Hot water in particular varies a lot between an electric element and a heat pump.</p>
   <p>Treat results as a planning estimate. Shading, dirt, panel age and inverter behaviour are not known to the forecast. System efficiency of around 80% is a typical starting point; adjust it once you compare a few days against your real meter or inverter app.</p>
   <p>Forecast data: <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>. Times are Albury local time.</p>
 </section>
@@ -295,7 +315,7 @@ tbody tr.on td:first-child{font-weight:700}
   "use strict";
   var LAT = -36.0737, LON = 146.9135, TZ = "Australia/Sydney";
   var els = {};
-  ["appCards","appSummary","sumChart","sumStats","acChart","acSplit","nCoolAt","nHeatAt","nStart","nEnd","coolAt","heatAt","acKw","acMsg","acStats","tempChart","tempSub","manual","dataLink","paste","usePaste","pasteMsg","size","inv","az","tilt","eff","days","daysOut","peak","calib","calibOut","refresh","fetched","status","main","total","period","stats","dailyChart","hourChart","hourTitle","hourSub","rows"]
+  ["appPlan","appSummary","sumChart","sumStats","acChart","acSplit","nCoolAt","nHeatAt","nStart","nEnd","coolAt","heatAt","acKw","acMsg","acStats","tempChart","tempSub","manual","dataLink","paste","usePaste","pasteMsg","size","inv","az","tilt","eff","days","daysOut","peak","calib","calibOut","refresh","fetched","status","main","total","period","stats","dailyChart","hourChart","hourTitle","hourSub","rows"]
     .forEach(function(id){ els[id] = document.getElementById(id); });
 
   var raw = null;          // { key, time[], gti[], temp[], cloud[], fetchedAt }
@@ -315,29 +335,62 @@ tbody tr.on td:first-child{font-weight:700}
     }
     sel.value = k === 0 ? "22" : "7";
   });
-  // Typical starting values. uses = per day, kwh = per use, hrs = running hours per use, when: 1 = dawn to dusk, 0 = dusk to dawn
+  // Typical starting values. kwh = energy per use, hrs = running hours per use.
+  // The example plan: days = weekdays used (0 = Sunday ... 6 = Saturday), state 1 = dawn to dusk, 2 = dusk to dawn.
+  var ALLDAYS = [0,1,2,3,4,5,6];
   var APPS = [
-    { id: "wm", name: "Washing machine",   uses: 0.6, kwh: 0.9,  hrs: 1.5,  when: "1" },
-    { id: "dr", name: "Dryer",             uses: 0.4, kwh: 3.5,  hrs: 1.5,  when: "1" },
-    { id: "ck", name: "Induction cooktop", uses: 1,   kwh: 1.1,  hrs: 0.75, when: "0" },
-    { id: "ov", name: "Oven",              uses: 0.5, kwh: 1.5,  hrs: 1,    when: "0" },
-    { id: "dw", name: "Dishwasher",        uses: 1,   kwh: 1.0,  hrs: 2,    when: "0" },
-    { id: "hw", name: "Hot water system",  uses: 1,   kwh: 5,    hrs: 1.5,  when: "1" }
+    { id: "wm", name: "Washing machine",   kwh: 0.9, hrs: 1.5,  days: [1,3,5,0], state: 1 },
+    { id: "dr", name: "Dryer",             kwh: 3.5, hrs: 1.5,  days: [1,3,0],   state: 1 },
+    { id: "ck", name: "Induction cooktop", kwh: 1.1, hrs: 0.75, days: ALLDAYS,   state: 2 },
+    { id: "ov", name: "Oven",              kwh: 1.5, hrs: 1,    days: [2,5,0],   state: 2 },
+    { id: "dw", name: "Dishwasher",        kwh: 1.0, hrs: 2,    days: ALLDAYS,   state: 2 },
+    { id: "hw", name: "Hot water system",  kwh: 5,   hrs: 1.5,  days: ALLDAYS,   state: 1 }
   ];
-  els.appCards.innerHTML = APPS.map(function(a){
-    return '<div class="appcard"><h3>' + a.name + '</h3><div class="appfields">' +
-      '<div class="field"><label for="' + a.id + 'Uses">Uses per day</label><input id="' + a.id + 'Uses" type="number" min="0" max="20" step="0.1" value="' + a.uses + '" inputmode="decimal"></div>' +
-      '<div class="field"><label for="' + a.id + 'Kwh">kWh per use</label><input id="' + a.id + 'Kwh" type="number" min="0" max="50" step="0.1" value="' + a.kwh + '" inputmode="decimal"></div>' +
-      '<div class="field"><label for="' + a.id + 'Hrs">Hours per use</label><input id="' + a.id + 'Hrs" type="number" min="0" max="24" step="0.25" value="' + a.hrs + '" inputmode="decimal"></div>' +
-      '<div class="field"><label for="' + a.id + 'When">When</label><select id="' + a.id + 'When">' +
-        '<option value="1">Dawn to dusk</option><option value="0">Dusk to dawn</option><option value="0.5">Half and half</option></select></div>' +
-      '</div><p class="appout" id="' + a.id + 'Out"></p></div>';
-  }).join("");
+  var WEEK = [{ d: 1, n: "Mon" }, { d: 2, n: "Tue" }, { d: 3, n: "Wed" }, { d: 4, n: "Thu" }, { d: 5, n: "Fri" }, { d: 6, n: "Sat" }, { d: 0, n: "Sun" }];
+  var DAYNAMES = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+  var STATE_LABEL = ["Off", "Dawn–dusk", "Dusk–dawn"];
+  var plan = {};
+  APPS.forEach(function(a){
+    plan[a.id] = {};
+    WEEK.forEach(function(w){ plan[a.id][w.d] = [a.days.indexOf(w.d) >= 0 ? a.state : 0, 0]; });
+  });
+  try {
+    var savedPlan = JSON.parse(localStorage.getItem("albury-solar-plan") || "null");
+    if (savedPlan) APPS.forEach(function(a){
+      WEEK.forEach(function(w){
+        var v = savedPlan[a.id] && savedPlan[a.id][w.d];
+        if (v && v.length === 2) plan[a.id][w.d] = [v[0] === 1 || v[0] === 2 ? v[0] : 0, v[1] === 1 || v[1] === 2 ? v[1] : 0];
+      });
+    });
+  } catch(e){}
+  function savePlan(){ try { localStorage.setItem("albury-solar-plan", JSON.stringify(plan)); } catch(e){} }
+  function appName(id){ var n = ""; APPS.forEach(function(a){ if (a.id === id) n = a.name; }); return n; }
+  function slotLabel(id, dow, k, st){
+    return appName(id) + ", " + DAYNAMES[dow] + ", use " + (k + 1) + ": " + STATE_LABEL[st] + ". Press to change.";
+  }
+  var todayDow = new Date(todayKey() + "T12:00:00").getDay();
+  els.appPlan.innerHTML =
+    '<thead><tr><th scope="col">Appliance</th><th scope="col">kWh/use</th><th scope="col">Hours/use</th>' +
+      WEEK.map(function(w){ return '<th scope="col"' + (w.d === todayDow ? ' class="today"' : "") + '>' + w.n + (w.d === todayDow ? "<br>today" : "") + '</th>'; }).join("") +
+    '</tr></thead><tbody>' +
+    APPS.map(function(a){
+      return '<tr><th scope="row">' + a.name + '</th>' +
+        '<td><input id="' + a.id + 'Kwh" type="number" min="0" max="50" step="0.1" value="' + a.kwh + '" inputmode="decimal" aria-label="' + a.name + ' kWh per use"></td>' +
+        '<td><input id="' + a.id + 'Hrs" type="number" min="0" max="24" step="0.25" value="' + a.hrs + '" inputmode="decimal" aria-label="' + a.name + ' hours per use"></td>' +
+        WEEK.map(function(w){
+          return '<td><div class="slots">' + [0, 1].map(function(k){
+            var st = plan[a.id][w.d][k];
+            return '<button type="button" class="slot" id="' + a.id + 'S' + w.d + '_' + k + '" data-app="' + a.id + '" data-dow="' + w.d + '" data-slot="' + k + '" data-s="' + st + '" aria-label="' + slotLabel(a.id, w.d, k, st) + '">' + STATE_LABEL[st] + '</button>';
+          }).join("") + '</div></td>';
+        }).join("") + '</tr>';
+    }).join("") + '</tbody><tfoot>' +
+    [["tot", "Total kWh"], ["day", "Dawn–dusk kWh"], ["night", "Dusk–dawn kWh"]].map(function(r){
+      return '<tr><th scope="row">' + r[1] + '</th><td></td><td></td>' +
+        WEEK.map(function(w){ return '<td class="num" id="app_' + r[0] + w.d + '"></td>'; }).join("") + '</tr>';
+    }).join("") + '</tfoot>';
   var appKeys = [];
   APPS.forEach(function(a){
-    ["Uses","Kwh","Hrs","When","Out"].forEach(function(k){ els[a.id + k] = document.getElementById(a.id + k); });
-    els[a.id + "When"].value = a.when;
-    ["Uses","Kwh","Hrs","When"].forEach(function(k){ appKeys.push(a.id + k); });
+    ["Kwh", "Hrs"].forEach(function(k){ els[a.id + k] = document.getElementById(a.id + k); appKeys.push(a.id + k); });
   });
   var KEYS = ["size","inv","az","tilt","eff","days","peak","coolAt","heatAt","nCoolAt","nHeatAt","nStart","nEnd","acKw"].concat(appKeys);
   try {
@@ -456,18 +509,20 @@ tbody tr.on td:first-child{font-weight:700}
     return Math.min(dc, s.inv);
   }
 
-  function appTotals(){
-    var rows = APPS.map(function(a){
-      var uses = num(els[a.id + "Uses"], 0, 20, a.uses);
+  // Energy for one weekday (0 = Sunday ... 6 = Saturday) from the weekly plan.
+  function appDay(dow){
+    var t = { rows: [], e: 0, h: 0, day: 0, night: 0 };
+    APPS.forEach(function(a){
       var kwh = num(els[a.id + "Kwh"], 0, 50, a.kwh);
       var hrs = num(els[a.id + "Hrs"], 0, 24, a.hrs);
-      var share = parseFloat(els[a.id + "When"].value);
-      if (!isFinite(share)) share = parseFloat(a.when);
-      var e = uses * kwh;
-      return { id: a.id, name: a.name, share: share, e: e, h: uses * hrs, day: e * share, night: e * (1 - share) };
+      var r = { id: a.id, name: a.name, day: 0, night: 0, h: 0 };
+      plan[a.id][dow].forEach(function(st){
+        if (st === 1){ r.day += kwh; r.h += hrs; }
+        else if (st === 2){ r.night += kwh; r.h += hrs; }
+      });
+      r.e = r.day + r.night;
+      t.rows.push(r); t.e += r.e; t.h += r.h; t.day += r.day; t.night += r.night;
     });
-    var t = { rows: rows, e: 0, h: 0, day: 0, night: 0 };
-    rows.forEach(function(r){ t.e += r.e; t.h += r.h; t.day += r.day; t.night += r.night; });
     return t;
   }
 
@@ -515,11 +570,11 @@ tbody tr.on td:first-child{font-weight:700}
       }
       o.hours.push({ h: h, kw: kw, t: tOk ? tt : null, mode: mode, night: lim.night, coolLim: lim.cool, heatLim: lim.heat });
     }
-    var ap = appTotals();
     var all = order.map(function(d){
       var o = map[d];
       o.cloud = o.cloudN ? o.cloudSum / o.cloudN : null;
-      o.appKwh = ap.e; o.appSun = ap.day; o.appBatt = ap.night;
+      var ap = appDay(new Date(d + "T12:00:00").getDay());
+      o.appKwh = ap.e; o.appSun = ap.day; o.appBatt = ap.night; o.appH = ap.h;
       return o;
     });
     var today = todayKey();
@@ -747,16 +802,19 @@ tbody tr.on td:first-child{font-weight:700}
     els.acChart.innerHTML = out;
   }
   function updateApps(){
-    var t = appTotals();
-    t.rows.forEach(function(r){
-      var when = r.share === 1 ? "dawn to dusk" : (r.share === 0 ? "dusk to dawn" : "half dawn to dusk, half dusk to dawn");
-      els[r.id + "Out"].innerHTML = "<strong>" + f1(r.e) + " kWh</strong> per day · " + f1(r.h) + " h running · " + when;
+    var wk = { e: 0, h: 0, day: 0, night: 0 };
+    WEEK.forEach(function(w){
+      var t = appDay(w.d);
+      wk.e += t.e; wk.h += t.h; wk.day += t.day; wk.night += t.night;
+      document.getElementById("app_tot" + w.d).textContent = f1(t.e);
+      document.getElementById("app_day" + w.d).textContent = f1(t.day);
+      document.getElementById("app_night" + w.d).textContent = f1(t.night);
     });
     els.appSummary.innerHTML =
-      stat("Appliances per day", f1(t.e) + " kWh") +
-      stat("Dawn to dusk", f1(t.day) + " kWh") +
-      stat("Dusk to dawn", f1(t.night) + " kWh") +
-      stat("Running time", f1(t.h) + " h");
+      stat("Planned per week", f1(wk.e) + " kWh") +
+      stat("Dawn to dusk", f1(wk.day) + " kWh") +
+      stat("Dusk to dawn", f1(wk.night) + " kWh") +
+      stat("Running time", f1(wk.h) + " h");
   }
 
   function drawSummary(s){
@@ -846,7 +904,7 @@ tbody tr.on td:first-child{font-weight:700}
     var d = daysData[selected];
     els.hourTitle.textContent = dayLabel(d.date, true) + ": " + f1(d.kwh) + " kWh";
     els.hourSub.textContent = "Peak " + f1(d.peak) + " kW" + (d.cloud != null ? " · average daytime cloud " + Math.round(d.cloud) + "%" : "") +
-      " · air con " + d.acH + " h (" + f1(d.acKwh) + " kWh)";
+      " · air con " + d.acH + " h (" + f1(d.acKwh) + " kWh) · appliances " + f1(d.appKwh) + " kWh";
     var hrs = d.hours.filter(function(x){ return x.h >= 5 && x.h <= 21; });
     var W = 760, H = 250, L = 44, R = 12, T = 22, B = 30;
     var peak = Math.max.apply(null, hrs.map(function(x){ return x.kw; }).concat([0.1]));
@@ -927,11 +985,20 @@ tbody tr.on td:first-child{font-weight:700}
       timer = setTimeout(function(){ load(false); }, 450);
     });
   });
-  APPS.forEach(function(a){
-    ["Uses","Kwh","Hrs"].forEach(function(k){
-      els[a.id + k].addEventListener("input", function(){ save(); if (raw) render(); else updateApps(); });
-    });
-    els[a.id + "When"].addEventListener("change", function(){ save(); if (raw) render(); else updateApps(); });
+  els.appPlan.addEventListener("click", function(e){
+    var b = e.target.closest("button.slot");
+    if (!b) return;
+    var id = b.getAttribute("data-app"), dow = parseInt(b.getAttribute("data-dow"), 10), k = parseInt(b.getAttribute("data-slot"), 10);
+    var st = (plan[id][dow][k] + 1) % 3;
+    plan[id][dow][k] = st;
+    b.setAttribute("data-s", st);
+    b.textContent = STATE_LABEL[st];
+    b.setAttribute("aria-label", slotLabel(id, dow, k, st));
+    savePlan();
+    if (raw) render(); else updateApps();
+  });
+  els.appPlan.addEventListener("input", function(e){
+    if (e.target.matches("input")){ save(); if (raw) render(); else updateApps(); }
   });
   els.peak.addEventListener("input", function(){ save(); if (raw) calibNote(settings()); });
   els.calib.addEventListener("click", calibrate);
